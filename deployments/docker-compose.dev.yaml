@@ -1,0 +1,27 @@
+version: "3"
+
+services:
+  mongodb:
+    image: mongo
+    environment:
+      - MONGODB_DATABASE=workflow_db
+      - MONGO_INITDB_ROOT_USERNAME=workflow
+      - MONGO_INITDB_ROOT_PASSWORD=workflow
+    ports:
+      - 27017:27017
+    volumes:
+      - workflow-mongo-data:/data/db
+
+  rabbitmq:
+    image: bitnami/rabbitmq
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=workflow
+      - RABBITMQ_DEFAULT_PASS=workflow
+      - NODE_IP_ADDRESS=127.0.0.1
+      - TZ=Europe/Paris
+
+volumes:
+  workflow-mongo-data:
