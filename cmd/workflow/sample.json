@@ -1,0 +1,45 @@
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "w_id": "3b6fa3a3-bca4-4ed2-b06d-a07328c26f46",
+  "b_id": "7a35e7e5-cec4-46f2-bb45-1e9de0c0f033",
+  "s_id": "f4a27672-209f-4d54-8df8-d44f36b717c3",
+  "c_chain": [],
+  "name": "test",
+  "steps": [
+    {
+      "name": "test_step_1",
+      "auto_propagate": false,
+      "in": [{ "pattern": "passthrough-pattern-in", "depth": 0 }],
+      "out": [
+        {
+          "pattern": "passthrough-pattern-out",
+          "next_step": 0,
+          "record": { "entity": "test_entity", "status": "success" },
+          "enrich": null
+        }
+      ],
+      "fail": [
+        {
+          "pattern": "passthrough-pattern-out",
+          "next_step": 0,
+          "record": { "entity": "test_entity", "status": "failure" },
+          "enrich": null
+        }
+      ]
+    }
+  ],
+  "current_step": 0,
+  "join_result": "",
+  "metadata": null,
+  "progress": {
+    "name": "test",
+    "create_date": "2021-12-01T23:33:33.1537431+01:00",
+    "start_date": "2021-12-01T23:33:36.1555463+01:00",
+    "end_date": "0001-01-01T00:00:00Z",
+    "status": "pending",
+    "error_code": "",
+    "entity_ref": "",
+    "duration": 0,
+    "routing_key": ""
+  }
+}
