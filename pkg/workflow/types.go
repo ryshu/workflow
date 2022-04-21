@@ -9,24 +9,24 @@ type JoinResult string
 
 const (
 	Joined    JoinResult = "joined"
-	NotJoined            = "not-joined"
+	NotJoined JoinResult = "not-joined"
 )
 
 type FlowState string
 
 const (
 	StateStarted    FlowState = "started"
-	StateShutdowned           = "shutdowned"
+	StateShutdowned FlowState = "shutdowned"
 )
 
 type ProgressStatus string
 
 const (
 	StepSuccess ProgressStatus = "success"
-	StepFailure                = "failure"
-	StepPending                = "pending"
-	StepRunning                = "running"
-	StepDropped                = "dropped"
+	StepFailure ProgressStatus = "failure"
+	StepPending ProgressStatus = "pending"
+	StepRunning ProgressStatus = "running"
+	StepDropped ProgressStatus = "dropped"
 )
 
 type ProgressError string
@@ -39,14 +39,14 @@ type PatternIn string
 
 const (
 	AggregatePattern     PatternIn = "aggregate-pattern-in"
-	PassthroughPatternIn           = "passthrough-pattern-in"
+	PassthroughPatternIn PatternIn = "passthrough-pattern-in"
 )
 
 type PatternOut string
 
 const (
 	SplitPattern          PatternOut = "split-pattern-out"
-	PassthroughPatternOut            = "passthrough-pattern-out"
+	PassthroughPatternOut PatternOut = "passthrough-pattern-out"
 )
 
 // Table stores user supplied fields of the following types:
@@ -87,5 +87,11 @@ func validateField(f interface{}) error {
 
 // Validate returns and error if any Go types in the table are incompatible with Table allowed types.
 func (t Table) Validate() error {
-	return validateField(t)
+	for _, val := range t {
+		ret := validateField(val)
+		if ret != nil {
+			return ret
+		}
+	}
+	return nil
 }

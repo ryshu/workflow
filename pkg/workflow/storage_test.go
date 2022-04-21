@@ -11,6 +11,7 @@ type StorageMock struct {
 	isFlowShutdownCalled           bool
 
 	CreateStateLogIfNotExistReturn error
+	CreateStateLogReturn           error
 	IsFlowShutdownErrorReturn      error
 	IsFlowShutdownBoolReturn       bool
 }
@@ -27,7 +28,7 @@ func (s *StorageMock) CreateStateLogIfNotExist(flow *workflow.Flow, routingKey s
 
 func (s *StorageMock) CreateStateLog(flow *workflow.Flow) error {
 	s.createStateLogCalled = true
-	return nil
+	return s.CreateStateLogReturn
 }
 
 func (s *StorageMock) StoreHistoryEntry(flow *workflow.Flow, record *workflow.HistoryRecord) error {

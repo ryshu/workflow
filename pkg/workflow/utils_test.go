@@ -1,6 +1,13 @@
 package workflow_test
 
-import "git.spikeelabs.com/workflow/v1/pkg/workflow"
+import (
+	"errors"
+
+	"git.spikeelabs.com/workflow/v1/pkg/workflow"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+)
 
 func getSimpleWorkflow() *workflow.Flow {
 	steps := []workflow.Step{
@@ -35,10 +42,14 @@ func getSimpleWorkflow() *workflow.Flow {
 	return workflow.NewFlow("test", steps)
 }
 
-func getMockedBroker() *workflow.Broker {
-	return workflow.NewBroker(newBrokerMock())
+func getSimpleWorkflowWithMetadata() *workflow.Flow {
+	flow := getSimpleWorkflow()
+	flow.Metadata = workflow.Table{"test": "test"}
+	return flow
 }
 
-func getMockerStore() *workflow.Storage {
-	return workflow.NewStorage(newStorageMock())
-}
+var _ = Describe("Utils", func() {
+	It("FailOnError panic", func() {
+		Expect(func() { workflow.FailOnError(errors.New("Sample"), "panic") }).To(Panic())
+	})
+})

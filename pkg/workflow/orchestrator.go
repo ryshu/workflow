@@ -35,7 +35,7 @@ func handlePattern(flow *Flow, action *StepOut, store *Storage, broker *Broker) 
 
 // handleOutActions is used to handle out actions of the workflow
 func handleOutActions(flow *Flow, actions []StepOut, store *Storage, broker *Broker) error {
-	if actions != nil && len(actions) > 0 {
+	if len(actions) > 0 {
 		// FIXME: Is this function safe for multi-actions ?
 		for _, action := range actions {
 			// Change flow current step to next step
@@ -56,7 +56,7 @@ func handleOutActions(flow *Flow, actions []StepOut, store *Storage, broker *Bro
 			}
 
 			// If enrich pattern might be called, call them on hooks
-			if action.Enrich != nil && len(action.Enrich) > 0 {
+			if len(action.Enrich) > 0 {
 				// TODO: Enrich pattern here using hook, if declared
 			}
 
@@ -134,7 +134,7 @@ func Aggregate(flow *Flow, action *StepIn, store *Storage) (bool, error) {
 			return false, err
 		}
 
-		if check == true {
+		if check {
 			flow.JoinResult = Joined
 			flow.CorrelationChain = flow.CorrelationChain[1:]
 			return true, nil
@@ -153,15 +153,15 @@ func Correlate(flow *Flow, store *Storage, broker *Broker) (bool, error) {
 	if err_is_shutdown != nil {
 		return false, err_is_shutdown
 	}
-	if result == true {
+	if result {
 		return false, nil
 	}
 
 	// AutoPropagate loop to propagate all notification which need to be autopropagated without correlation
 	// and handling by a callback.
-	for true {
+	for {
 		step := flow.GetCurrentStep()
-		if step.AutoPropagate == true {
+		if step.AutoPropagate {
 			err_propagate := Propagate(flow, StepSuccess, store, nil)
 			if err_propagate != nil {
 				return false, err_propagate
@@ -185,18 +185,16 @@ func Correlate(flow *Flow, store *Storage, broker *Broker) (bool, error) {
 				if err != nil {
 					return false, err
 				}
-				if result == false {
+				if !result {
 					check = false
-					break
 				}
 			default:
 				check = false
-				break
 			}
 		}
 
 		// If a check fail, drop message
-		if check == false {
+		if !check {
 			clone := flow.DeepCopy()
 			clone.AssignBranchId()
 

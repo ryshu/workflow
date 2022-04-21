@@ -81,9 +81,7 @@ func (s *Step) GetInKey(flowName string) string {
 // Marshal is a shortcut on step to Marshal or panic if err
 func (s *Step) Marshal() []byte {
 	ret, err := json.Marshal(s)
-	if err != nil {
-		panic(err)
-	}
+	FailOnError(err, "Fail to unmarshal Step")
 	return ret
 }
 
@@ -120,6 +118,7 @@ func NewFlow(name string, steps []Step) *Flow {
 	}
 }
 
+// Validate Flow json struct
 func (f *Flow) Validate() error {
 	v := validator.New()
 	if err := v.Struct(f); err != nil {
@@ -176,9 +175,7 @@ func (f *Flow) AssignStepId() {
 // Marshal is a shortcut on flow to Marshal or panic if err
 func (f *Flow) Marshal() []byte {
 	ret, err := json.Marshal(f)
-	if err != nil {
-		panic(err)
-	}
+	FailOnError(err, "Fail to unmarshal Flow")
 	return ret
 }
 
@@ -186,13 +183,13 @@ func (f *Flow) DeepCopy() *Flow {
 	// FIXME: Setup K8S GenGo package to generate efficient DeepCopy function instead of copier package
 	var buffer bytes.Buffer
 	var dst Flow
-	if err := gob.NewEncoder(&buffer).Encode(f); err != nil {
-		panic(err)
-	}
 
-	if err := gob.NewDecoder(&buffer).Decode(&dst); err != nil {
-		panic(err)
-	}
+	err_encode := gob.NewEncoder(&buffer).Encode(f)
+	FailOnError(err_encode, "Fail to encode flow")
+
+	err_decode := gob.NewDecoder(&buffer).Decode(&dst)
+	FailOnError(err_decode, "Fail to decode encoded flow")
+
 	return &dst
 }
 
@@ -204,7 +201,6 @@ func (f *Flow) SetMetadata(metadata Table) error {
 
 	if f.Metadata != nil {
 		for key, val := range metadata {
-			// FIXME: Did we need to handle field convert here ?
 			f.Metadata[key] = val
 		}
 	} else {

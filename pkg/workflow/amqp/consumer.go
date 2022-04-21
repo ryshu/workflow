@@ -13,7 +13,7 @@ func (session *Session) Consume(name string, keys []string, handler func(body []
 		false, // no-wait
 		nil,   // arguments
 	)
-	failOnError(err, "Failed to declare a queue")
+	FailOnError(err, "Failed to declare a queue")
 
 	for _, s := range keys {
 		log.Printf("Binding queue %s to exchange %s with routing key %s", q.Name, session.exchange, s)
@@ -23,7 +23,7 @@ func (session *Session) Consume(name string, keys []string, handler func(body []
 			session.exchange, // exchange
 			false,
 			nil)
-		failOnError(err, "Failed to bind a queue")
+		FailOnError(err, "Failed to bind a queue")
 	}
 
 	msgs, err := session.channel.Consume(
@@ -35,7 +35,7 @@ func (session *Session) Consume(name string, keys []string, handler func(body []
 		false,  // no wait
 		nil,    // args
 	)
-	failOnError(err, "Failed to register a consumer")
+	FailOnError(err, "Failed to register a consumer")
 
 	forever := make(chan bool)
 
