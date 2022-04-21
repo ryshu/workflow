@@ -144,7 +144,7 @@ func (session *Session) init(conn *amqp.Connection) error {
 		false,            // no-wait
 		nil,              // arguments
 	)
-	failOnError(err, "Failed to declare an exchange")
+	FailOnError(err, "Failed to declare an exchange")
 
 	session.changeChannel(ch)
 	session.IsReady = true

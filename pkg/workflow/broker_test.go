@@ -3,11 +3,11 @@ package workflow_test
 import (
 	"errors"
 	"log"
-	"testing"
 
 	"bou.ke/monkey"
 	"git.spikeelabs.com/workflow/v1/pkg/workflow"
-	"github.com/stretchr/testify/assert"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
 type BrokerMock struct {
@@ -54,160 +54,263 @@ func getMockedHandler(table workflow.Table, err error) func(flow *workflow.Flow)
 	}
 }
 
-func TestNewBroker(t *testing.T) {
-	assert := assert.New(t)
+var _ = Describe("Broker", func() {
+	Describe("Default connector utils", func() {
+		It("Check new broker creation", func() {
+			mock := newBrokerMock()
 
-	mock := newBrokerMock()
+			broker := workflow.NewBroker(mock)
 
-	broker := workflow.NewBroker(mock)
+			Expect(mock.closeCalled).To(BeFalse())
+			Expect(mock.consumeCalled).To(BeFalse())
+			Expect(mock.unsafePushCalled).To(BeFalse())
+			Expect(mock.pushCalled).To(BeFalse())
+			Expect(*broker).To(BeAssignableToTypeOf(workflow.Broker{}))
+		})
 
-	assert.False(mock.closeCalled)
-	assert.False(mock.consumeCalled)
-	assert.False(mock.unsafePushCalled)
-	assert.False(mock.pushCalled)
+		It("Check that we can push to broker (safe push)", func() {
+			mock := newBrokerMock()
 
-	assert.IsType(workflow.Broker{}, *broker)
-}
+			broker := workflow.NewBroker(mock)
+			broker.Push("test", []byte("string"))
 
-func TestBrokerPush(t *testing.T) {
-	assert := assert.New(t)
+			Expect(mock.closeCalled).To(BeFalse())
+			Expect(mock.consumeCalled).To(BeFalse())
+			Expect(mock.unsafePushCalled).To(BeFalse())
+			Expect(mock.pushCalled).To(BeTrue())
+			Expect(*broker).To(BeAssignableToTypeOf(workflow.Broker{}))
+		})
 
-	mock := newBrokerMock()
+		It("Check that we can push to broker (unsafe push)", func() {
+			mock := newBrokerMock()
 
-	broker := workflow.NewBroker(mock)
-	broker.Push("test", []byte("string"))
+			broker := workflow.NewBroker(mock)
+			broker.UnsafePush("test", []byte("string"))
 
-	assert.False(mock.closeCalled)
-	assert.False(mock.consumeCalled)
-	assert.False(mock.unsafePushCalled)
-	assert.True(mock.pushCalled)
+			Expect(mock.closeCalled).To(BeFalse())
+			Expect(mock.consumeCalled).To(BeFalse())
+			Expect(mock.unsafePushCalled).To(BeTrue())
+			Expect(mock.pushCalled).To(BeFalse())
+			Expect(*broker).To(BeAssignableToTypeOf(workflow.Broker{}))
+		})
 
-	assert.IsType(workflow.Broker{}, *broker)
-}
+		It("Check that we can close the broker", func() {
+			mock := newBrokerMock()
 
-func TestBrokerUnsafePush(t *testing.T) {
-	assert := assert.New(t)
+			broker := workflow.NewBroker(mock)
+			broker.Close()
 
-	mock := newBrokerMock()
+			Expect(mock.closeCalled).To(BeTrue())
+			Expect(mock.consumeCalled).To(BeFalse())
+			Expect(mock.unsafePushCalled).To(BeFalse())
+			Expect(mock.pushCalled).To(BeFalse())
+			Expect(*broker).To(BeAssignableToTypeOf(workflow.Broker{}))
+		})
+	})
 
-	broker := workflow.NewBroker(mock)
-	broker.UnsafePush("test", []byte("string"))
+	Describe("Consume handler", func() {
+		var mock *BrokerMock
+		var broker *workflow.Broker
+		var store *StorageMock
+		var callPatchPrintf int
+		var sentryMock *SentryMock
+		var PatchPrintf *monkey.PatchGuard
 
-	assert.False(mock.closeCalled)
-	assert.False(mock.consumeCalled)
-	assert.True(mock.unsafePushCalled)
-	assert.False(mock.pushCalled)
+		BeforeEach(func() {
+			mock = newBrokerMock()
+			broker = workflow.NewBroker(mock)
+			store = newStorageMock()
 
-	assert.IsType(workflow.Broker{}, *broker)
-}
+			// Setup mocks
+			callPatchPrintf = 0
+			sentryMock = NewSentryMock()
+			PatchPrintf = monkey.Patch(log.Printf, func(format string, v ...interface{}) { callPatchPrintf += 1 })
+		})
 
-func TestBrokerClose(t *testing.T) {
-	assert := assert.New(t)
+		Context("without metadata or errors in handler return", func() {
+			BeforeEach(func() {
+				broker.Consume("test", []string{"sample"}, workflow.NewStorage(store), getMockedHandler(nil, nil))
+			})
 
-	mock := newBrokerMock()
+			It("Testing ConfigureScope is called during handling of valid message", func() {
+				sentryMock.PatchConfigureScope.Restore()
+				mock.handler(getSimpleWorkflow().Marshal())
+				Expect(sentryMock.callPatchConfigureScope).To(Equal(1))
+			})
 
-	broker := workflow.NewBroker(mock)
-	broker.Close()
+			It("Testing ConfigureScope is called during handling of valid message", func() {
+				sentryMock.PatchSetTag.Restore()
+				mock.handler(getSimpleWorkflow().Marshal())
+				Expect(sentryMock.callPatchSetTag).To(Equal(4))
+			})
 
-	assert.True(mock.closeCalled)
-	assert.False(mock.consumeCalled)
-	assert.False(mock.unsafePushCalled)
-	assert.False(mock.pushCalled)
+			It("Testing Error while Parsing invalid json body", func() {
+				callPatchPrintf = 0
+				sentryMock.PatchCaptureException.Restore()
+				mock.handler([]byte("not_json"))
+				Expect(sentryMock.callPatchCaptureException).To(Equal(1))
+				Expect(callPatchPrintf).To(Equal(1))
+			})
 
-	assert.IsType(workflow.Broker{}, *broker)
-}
+			It("Testing Error while Validating body", func() {
+				callPatchPrintf = 0
+				sentryMock.PatchCaptureException.Restore()
+				mock.handler([]byte("{\"test\": \"test\"}"))
+				Expect(sentryMock.callPatchCaptureException).To(Equal(1))
+				Expect(callPatchPrintf).To(Equal(1))
+			})
 
-func TestBrokerConsume(t *testing.T) {
-	assert := assert.New(t)
-	mock := newBrokerMock()
-	broker := workflow.NewBroker(mock)
-	store := newStorageMock()
+			It("Testing Error on CreateStateLogIfNotExist", func() {
+				store.CreateStateLogIfNotExistReturn = errors.New("Sample")
+				sentryMock.PatchConfigureScope.Restore()
+				sentryMock.PatchCaptureException.Restore()
+				mock.handler(getSimpleWorkflow().Marshal())
+				Expect(sentryMock.callPatchCaptureException).To(Equal(1))
+				Expect(sentryMock.callPatchConfigureScope).To(Equal(1))
+				store.CreateStateLogIfNotExistReturn = nil
+			})
 
-	// Setup mocks
-	callPatchPrintf := 0
-	sentry := NewSentryMock()
-	PatchPrintf := monkey.Patch(log.Printf, func(format string, v ...interface{}) { callPatchPrintf += 1 })
+			It("Testing Error on IsFlowShutdown", func() {
+				callPatchPrintf = 0
+				store.IsFlowShutdownErrorReturn = errors.New("Sample")
+				sentryMock.PatchConfigureScope.Restore()
+				sentryMock.PatchCaptureException.Restore()
+				mock.handler(getSimpleWorkflow().Marshal())
+				Expect(sentryMock.callPatchCaptureException).To(Equal(1))
+				Expect(sentryMock.callPatchConfigureScope).To(Equal(1))
+				Expect(callPatchPrintf).To(Equal(2))
+				store.IsFlowShutdownErrorReturn = nil
+			})
 
-	// Basic testing Consume
-	broker.Consume("test", []string{"sample"}, workflow.NewStorage(store), getMockedHandler(nil, nil))
-	assert.False(mock.closeCalled)
-	assert.True(mock.consumeCalled)
-	assert.False(mock.unsafePushCalled)
-	assert.False(mock.pushCalled)
-	assert.IsType(workflow.Broker{}, *broker)
+			It("Testing IsFlowShutdown return True (flow is shutdown manually)", func() {
+				callPatchPrintf = 0
+				store.IsFlowShutdownBoolReturn = true
+				sentryMock.PatchConfigureScope.Restore()
+				mock.handler(getSimpleWorkflow().Marshal())
+				Expect(sentryMock.callPatchConfigureScope).To(Equal(1))
+				Expect(callPatchPrintf).To(Equal(1))
+				store.IsFlowShutdownBoolReturn = false
+			})
 
-	// Testing ConfigureScope is called during handling of valid message
-	sentry.PatchConfigureScope.Restore()
-	mock.handler(getSimpleWorkflow().Marshal())
-	assert.Equal(1, sentry.callPatchConfigureScope)
-	sentry.Reset()
+			It("Testing SetMetaData for propagate without errors", func() {
+				broker.Consume("test", []string{"sample"}, workflow.NewStorage(store), getMockedHandler(workflow.Table{"test": "test"}, nil))
+				callPatchPrintf = 0
+				store.IsFlowShutdownBoolReturn = true
+				sentryMock.PatchConfigureScope.Restore()
+				mock.handler(getSimpleWorkflow().Marshal())
+				Expect(sentryMock.callPatchConfigureScope).To(Equal(1))
+				Expect(callPatchPrintf).To(Equal(1))
+				store.IsFlowShutdownBoolReturn = false
+			})
 
-	// Testing ConfigureScope is called during handling of valid message
-	sentry.PatchSetTag.Restore()
-	mock.handler(getSimpleWorkflow().Marshal())
-	assert.Equal(4, sentry.callPatchSetTag)
-	sentry.Reset()
+			It("Testing when propagate fail (Sentry Configure Scope)", func() {
+				broker.Consume("test", []string{"sample"}, workflow.NewStorage(store), getMockedHandler(workflow.Table{"test": "test"}, nil))
+				callPatchPrintf = 0
+				store.CreateStateLogReturn = errors.New("Sample")
+				sentryMock.PatchCaptureException.Restore()
+				sentryMock.PatchConfigureScope.Restore()
 
-	// Testing Error while Parsing invalid json body
-	callPatchPrintf = 0
-	sentry.PatchCaptureException.Restore()
-	mock.handler([]byte("not_json"))
-	assert.Equal(1, sentry.callPatchCaptureException)
-	assert.Equal(1, callPatchPrintf)
-	sentry.Reset()
+				Expect(func() { mock.handler(getSimpleWorkflow().Marshal()) }).To(Panic())
+				Expect(sentryMock.callPatchCaptureException).To(Equal(1))
+				Expect(sentryMock.callPatchConfigureScope).To(Equal(2))
+				Expect(callPatchPrintf).To(Equal(1))
+				store.IsFlowShutdownBoolReturn = false
+			})
 
-	// Testing Error while Validating body
-	callPatchPrintf = 0
-	sentry.PatchCaptureException.Restore()
-	mock.handler([]byte("{\"test\": \"test\"}"))
-	assert.Equal(1, sentry.callPatchCaptureException)
-	assert.Equal(1, callPatchPrintf)
-	sentry.Reset()
+			It("Testing when propagate fail (Sentry Set Context)", func() {
+				broker.Consume("test", []string{"sample"}, workflow.NewStorage(store), getMockedHandler(workflow.Table{"test": "test"}, nil))
+				callPatchPrintf = 0
+				store.CreateStateLogReturn = errors.New("Sample")
+				sentryMock.PatchCaptureException.Restore()
+				sentryMock.PatchSetContext.Restore()
 
-	// Testing Error on CreateStateLogIfNotExist
-	store.CreateStateLogIfNotExistReturn = errors.New("Sample")
-	sentry.PatchConfigureScope.Restore()
-	sentry.PatchCaptureException.Restore()
-	mock.handler(getSimpleWorkflow().Marshal())
-	assert.Equal(1, sentry.callPatchCaptureException)
-	assert.Equal(1, sentry.callPatchConfigureScope)
-	sentry.Reset()
-	store.CreateStateLogIfNotExistReturn = nil
+				Expect(func() { mock.handler(getSimpleWorkflow().Marshal()) }).To(Panic())
+				Expect(sentryMock.callPatchCaptureException).To(Equal(1))
+				Expect(sentryMock.callPatchSetContext).To(Equal(2))
+				Expect(callPatchPrintf).To(Equal(1))
+				store.IsFlowShutdownBoolReturn = false
+			})
+		})
 
-	// Testing Error on IsFlowShutdown
-	callPatchPrintf = 0
-	store.IsFlowShutdownErrorReturn = errors.New("Sample")
-	sentry.PatchConfigureScope.Restore()
-	sentry.PatchCaptureException.Restore()
-	mock.handler(getSimpleWorkflow().Marshal())
-	assert.Equal(1, sentry.callPatchCaptureException)
-	assert.Equal(1, sentry.callPatchConfigureScope)
-	assert.Equal(2, callPatchPrintf) // Display processing flow + Fail to correlate flow
-	sentry.Reset()
-	store.IsFlowShutdownErrorReturn = nil
+		Context("with metadata in handler return", func() {
+			BeforeEach(func() {
+				broker.Consume("test", []string{"sample"}, workflow.NewStorage(store), getMockedHandler(workflow.Table{"test": "test"}, nil))
+			})
 
-	// Testing IsFlowShutdown return True (flow is shutdown manually)
-	callPatchPrintf = 0
-	store.IsFlowShutdownBoolReturn = true
-	sentry.PatchConfigureScope.Restore()
-	mock.handler(getSimpleWorkflow().Marshal())
-	assert.Equal(1, sentry.callPatchConfigureScope)
-	assert.Equal(1, callPatchPrintf) // Display processing flow
-	sentry.Reset()
-	store.IsFlowShutdownBoolReturn = false
+			It("SetMetadata is called and success to set (no metadata before)", func() {
+				// Testing ConfigureScope is called during handling of valid message
+				callPatchPrintf = 0
+				sentryMock.PatchConfigureScope.Restore()
+				sentryMock.PatchCaptureException.Restore()
+				mock.handler(getSimpleWorkflow().Marshal())
+				Expect(sentryMock.callPatchConfigureScope).To(Equal(1))
+				Expect(sentryMock.callPatchCaptureException).To(Equal(0))
+				Expect(callPatchPrintf).To(Equal(1))
+			})
 
-	// Testing SetMetaData for propagate without errors
-	// TODO:
+			It("SetMetadata is called and success to set (metadata before)", func() {
+				callPatchPrintf = 0
+				sentryMock.PatchConfigureScope.Restore()
+				sentryMock.PatchCaptureException.Restore()
+				mock.handler(getSimpleWorkflowWithMetadata().Marshal())
+				Expect(sentryMock.callPatchConfigureScope).To(Equal(1))
+				Expect(sentryMock.callPatchCaptureException).To(Equal(0))
+				Expect(callPatchPrintf).To(Equal(1))
+			})
+		})
 
-	// Testing SetMetaData with errors
-	// TODO:
+		Context("with invalid metadata in handler return", func() {
+			BeforeEach(func() {
+				broker.Consume(
+					"test",
+					[]string{"sample"},
+					workflow.NewStorage(store),
+					getMockedHandler(workflow.Table{"test": workflow.Table{"test": "test"}}, nil),
+				)
+			})
 
-	// Testing Error return by handler
-	// TODO:
+			It("SetMetaData is called and fail to validate returned Table", func() {
+				sentryMock.PatchConfigureScope.Restore()
+				sentryMock.PatchCaptureException.Restore()
+				mock.handler(getSimpleWorkflow().Marshal())
+				Expect(sentryMock.callPatchConfigureScope).To(Equal(1))
+				Expect(sentryMock.callPatchCaptureException).To(Equal(1))
+				Expect(callPatchPrintf).To(Equal(2))
+			})
+		})
 
-	// Testing Error during Propagate
-	// TODO:
+		Context("with error in handler return", func() {
+			BeforeEach(func() {
+				broker.Consume(
+					"test",
+					[]string{"sample"},
+					workflow.NewStorage(store),
+					getMockedHandler(nil, errors.New("Sample")),
+				)
+			})
 
-	// Unpatch mocks
-	PatchPrintf.Unpatch()
-}
+			It("Sentry and Fail are called (check Configure Scope)", func() {
+				sentryMock.PatchConfigureScope.Restore()
+				sentryMock.PatchCaptureException.Restore()
+				mock.handler(getSimpleWorkflow().Marshal())
+				Expect(sentryMock.callPatchConfigureScope).To(Equal(2))
+				Expect(sentryMock.callPatchCaptureException).To(Equal(1))
+				Expect(callPatchPrintf).To(Equal(1))
+			})
+
+			It("Sentry and Fail are called (check Set Context)", func() {
+				sentryMock.PatchSetContext.Restore()
+				sentryMock.PatchCaptureException.Restore()
+				mock.handler(getSimpleWorkflow().Marshal())
+				Expect(sentryMock.callPatchSetContext).To(Equal(2))
+				Expect(sentryMock.callPatchCaptureException).To(Equal(1))
+				Expect(callPatchPrintf).To(Equal(1))
+			})
+		})
+
+		AfterEach(func() {
+			sentryMock.Reset()
+			PatchPrintf.Unpatch()
+		})
+	})
+})

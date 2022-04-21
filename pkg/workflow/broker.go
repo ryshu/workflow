@@ -71,7 +71,7 @@ func (b *Broker) Consume(name string, keys []string, store *Storage, handler fun
 			sentry.CaptureException(err)
 			return
 		}
-		if res == false {
+		if !res {
 			// If correlate return false, skip handling and propagate
 			return
 		}
